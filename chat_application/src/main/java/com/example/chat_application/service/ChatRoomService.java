@@ -1,0 +1,76 @@
+package com.example.chat_application.service;
+
+import com.example.chat_application.dto.ChatSidebarDTO;
+import com.example.chat_application.model.ChatRoom;
+import com.example.chat_application.model.ChatRoomType;
+import com.example.chat_application.model.User;
+import com.example.chat_application.repository.ChatRoomRepository;
+import com.example.chat_application.repository.UserRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+@Service
+public class ChatRoomService {
+
+    private final ChatRoomRepository chatRoomRepository;
+    private final UserRepository userRepository;
+
+    public ChatRoomService(ChatRoomRepository chatRoomRepository,
+                           UserRepository userRepository) {
+        this.chatRoomRepository = chatRoomRepository;
+        this.userRepository = userRepository;
+    }
+
+    /* =====================================================
+       ONE-TO-ONE ROOM
+       ===================================================== */
+    @Transactional
+    public ChatRoom getOrCreateOneToOneRoom(Long currentUserId, Long otherUserId) {
+
+        List<ChatRoom> rooms =
+                chatRoomRepository.findOneToOneChats(currentUserId, otherUserId);
+
+        if (!rooms.isEmpty()) {
+            return rooms.get(0);
+        }
+
+        User currentUser = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        User otherUser = userRepository.findById(otherUserId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        ChatRoom newRoom = new ChatRoom();
+        newRoom.setRoomId(UUID.randomUUID().toString());
+        newRoom.setType(ChatRoomType.PRIVATE);
+        newRoom.setParticipants(Set.of(currentUser, otherUser));
+
+        return chatRoomRepository.save(newRoom);
+    }
+
+    /* =====================================================
+       🔒 CHAT SIDEBAR (E2EE SAFE)
+       ===================================================== */
+    public List<ChatSidebarDTO> getUserChatSidebar(User user) {
+
+        List<Object[]> rows =
+                chatRoomRepository.findChatRoomsWithLastMessage(user);
+
+        return rows.stream()
+                .map(r -> new ChatSidebarDTO(
+                        (Long) r[0],              // chatRoomId
+                        (Long) r[1],              // otherUserId
+                        (String) r[2],            // otherUsername
+                        (String) r[3],
+                        (String) r[4], // otherUserEmail
+                        (LocalDateTime) r[5],     // lastMessageTime
+                        (Long) r[6]               // lastMessageSenderId
+                ))
+                .toList();
+    }
+}
