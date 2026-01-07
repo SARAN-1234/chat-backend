@@ -1,8 +1,11 @@
-HELP.md
+### Maven ###
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+### HELP ###
+HELP.md
 
 ### STS ###
 .apt_generated
@@ -31,3 +34,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# ==========================
+# Spring Boot Config
+# ==========================
+# Allow main application.properties to be committed
+!src/main/resources/application.properties
