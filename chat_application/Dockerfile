@@ -1,14 +1,24 @@
-# Use Java 17
+# =========================
+# Build stage
+# =========================
+FROM maven:3.9.6-eclipse-temurin-17 AS build
+
+WORKDIR /build
+COPY pom.xml .
+COPY src ./src
+
+RUN mvn clean package -DskipTests
+
+
+# =========================
+# Runtime stage
+# =========================
 FROM eclipse-temurin:17-jdk-alpine
 
-# Set working directory
 WORKDIR /app
 
-# Copy Maven build output
-COPY target/*.jar app.jar
+COPY --from=build /build/target/*.jar app.jar
 
-# Expose Spring Boot port
 EXPOSE 8080
 
-# Run app
 ENTRYPOINT ["java", "-jar", "app.jar"]
