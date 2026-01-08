@@ -18,51 +18,45 @@ import java.util.Collections;
 public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
-    private final UserRepository userRepository;
 
-    public JwtFilter(JwtUtil jwtUtil, UserRepository userRepository) {
+    public JwtFilter(JwtUtil jwtUtil) {
         this.jwtUtil = jwtUtil;
-        this.userRepository = userRepository;
     }
 
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        return request.getServletPath().startsWith("/auth/");
-    }
-
-    @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain)
-            throws ServletException, IOException {
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain
+    ) throws ServletException, IOException {
 
         String authHeader = request.getHeader("Authorization");
+
+        // 🔓 Skip auth endpoints
+        if (request.getRequestURI().startsWith("/api/auth")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
 
-            try {
+            if (jwtUtil.validateToken(token)) {
                 String username = jwtUtil.extractUsername(token);
 
-                User user = userRepository.findByUsername(username).orElse(null);
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                username,
+                                null,
+                                Collections.emptyList()
+                        );
 
-                if (user != null) {
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    user.getUsername(),
-                                    null,
-                                    Collections.emptyList()
-                            );
-
-                    SecurityContextHolder.getContext()
-                            .setAuthentication(authentication);
-                }
-
-            } catch (Exception ex) {
-                SecurityContextHolder.clearContext();
+                SecurityContextHolder.getContext()
+                        .setAuthentication(authentication);
             }
         }
 
         filterChain.doFilter(request, response);
     }
 }
+
