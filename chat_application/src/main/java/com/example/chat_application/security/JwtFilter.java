@@ -1,7 +1,5 @@
 package com.example.chat_application.security;
 
-import com.example.chat_application.model.User;
-import com.example.chat_application.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,13 +28,13 @@ public class JwtFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
-        String authHeader = request.getHeader("Authorization");
-
-        // 🔓 Skip auth endpoints
+        // 🔓 Skip auth routes
         if (request.getRequestURI().startsWith("/api/auth")) {
             filterChain.doFilter(request, response);
             return;
         }
+
+        String authHeader = request.getHeader("Authorization");
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
@@ -51,12 +49,10 @@ public class JwtFilter extends OncePerRequestFilter {
                                 Collections.emptyList()
                         );
 
-                SecurityContextHolder.getContext()
-                        .setAuthentication(authentication);
+                SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         }
 
         filterChain.doFilter(request, response);
     }
 }
-

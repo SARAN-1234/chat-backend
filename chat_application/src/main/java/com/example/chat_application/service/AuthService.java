@@ -24,12 +24,15 @@ public class AuthService {
         this.jwtUtil = jwtUtil;
     }
 
-    /**
-     * ✅ LOGIN (JWT + USER INFO)
-     */
+    /* =========================
+       ✅ LOGIN (FINAL FIXED)
+       ========================= */
     public LoginResponse login(String username, String password) {
 
-        // 1️⃣ Fetch user
+        // 🔴 CRITICAL FIX — NORMALIZE INPUT
+        username = username.trim().toLowerCase();
+        password = password.trim();
+
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() ->
                         new ResponseStatusException(
@@ -38,7 +41,6 @@ public class AuthService {
                         )
                 );
 
-        // 2️⃣ Verify password
         if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
@@ -46,10 +48,8 @@ public class AuthService {
             );
         }
 
-        // 3️⃣ Generate JWT
         String token = jwtUtil.generateToken(user.getUsername());
 
-        // 4️⃣ Return response
         return new LoginResponse(
                 token,
                 user.getId(),
@@ -58,23 +58,21 @@ public class AuthService {
         );
     }
 
-    /**
-     * ✅ SIGNUP
-     */
+    /* =========================
+       ✅ SIGNUP (FINAL FIXED)
+       ========================= */
     public void signup(String username, String email, String password) {
 
+        username = username.trim().toLowerCase();
+        email = email.trim().toLowerCase();
+        password = password.trim();
+
         if (userRepository.existsByUsername(username)) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Username already exists"
-            );
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists");
         }
 
         if (userRepository.existsByEmail(email)) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Email already exists"
-            );
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already exists");
         }
 
         User user = new User();
