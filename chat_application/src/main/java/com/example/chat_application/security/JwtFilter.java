@@ -12,7 +12,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.Collections;
 
 @Component
@@ -24,6 +23,11 @@ public class JwtFilter extends OncePerRequestFilter {
     public JwtFilter(JwtUtil jwtUtil, UserRepository userRepository) {
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return request.getServletPath().startsWith("/auth/");
     }
 
     @Override
@@ -40,15 +44,22 @@ public class JwtFilter extends OncePerRequestFilter {
             try {
                 String username = jwtUtil.extractUsername(token);
 
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(
-                                username, null, Collections.emptyList()
-                        );
+                User user = userRepository.findByUsername(username).orElse(null);
 
-                SecurityContextHolder.getContext()
-                        .setAuthentication(authentication);
+                if (user != null) {
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(
+                                    user.getUsername(),
+                                    null,
+                                    Collections.emptyList()
+                            );
 
-            } catch (Exception ignored) {
+                    SecurityContextHolder.getContext()
+                            .setAuthentication(authentication);
+                }
+
+            } catch (Exception ex) {
+                SecurityContextHolder.clearContext();
             }
         }
 
