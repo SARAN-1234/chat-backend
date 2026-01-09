@@ -62,13 +62,18 @@ public class ChatWebSocketController {
         profileGuardService.checkProfileCompleted(sender);
 
         /* ===============================
+           🔎 BASIC PAYLOAD VALIDATION
+           =============================== */
+        if (msg.getCipherText() == null || msg.getIv() == null) {
+            throw new IllegalArgumentException("Encrypted message payload missing");
+        }
+
+        /* ===============================
            🔥 CREATE OR FIND CHAT ROOM
-           - If chatRoomId == null → FIRST MESSAGE
-           - If chatRoomId exists → NORMAL MESSAGE
            =============================== */
         Message savedMessage = messageService.sendMessage(
-                msg.getChatRoomId(),          // 🔑 MAY BE NULL for first msg
-                msg.getReceiverId(),          // 🔥 REQUIRED for first PRIVATE msg
+                msg.getChatRoomId(),                 // may be precomputed
+                msg.getReceiverId(),                 // required only for first private msg
                 sender,
                 msg.getCipherText(),
                 msg.getIv(),
@@ -82,12 +87,7 @@ public class ChatWebSocketController {
            =============================== */
         ChatMessageDTO response = new ChatMessageDTO();
         response.setId(savedMessage.getId());
-
-        // 🔥 ALWAYS send PUBLIC roomId (String)
-        response.setChatRoomId(
-                savedMessage.getChatRoom().getRoomId()
-        );
-
+        response.setChatRoomId(savedMessage.getChatRoom().getRoomId());
         response.setCipherText(savedMessage.getCipherText());
         response.setIv(savedMessage.getIv());
         response.setEncryptedAesKeyForSender(
@@ -96,7 +96,6 @@ public class ChatWebSocketController {
         response.setEncryptedAesKeyForReceiver(
                 savedMessage.getEncryptedAesKeyForReceiver()
         );
-
         response.setType(savedMessage.getType());
         response.setStatus(savedMessage.getStatus());
         response.setSenderId(sender.getId());

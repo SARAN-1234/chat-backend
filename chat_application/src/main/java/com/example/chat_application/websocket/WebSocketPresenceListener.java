@@ -7,7 +7,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Component;
-import org.springframework.web.socket.messaging.SessionConnectEvent;
+import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.time.LocalDateTime;
@@ -21,35 +21,40 @@ public class WebSocketPresenceListener {
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
-    private static final Map<String, AtomicInteger> ACTIVE_SESSIONS =
+    // 🔐 userId → active session count
+    private static final Map<Long, AtomicInteger> ACTIVE_SESSIONS =
             new ConcurrentHashMap<>();
 
-    public WebSocketPresenceListener(UserRepository userRepository,
-                                     SimpMessagingTemplate messagingTemplate) {
+    public WebSocketPresenceListener(
+            UserRepository userRepository,
+            SimpMessagingTemplate messagingTemplate
+    ) {
         this.userRepository = userRepository;
         this.messagingTemplate = messagingTemplate;
     }
 
     /* =========================
-       🔵 CONNECT (AUTH READY)
+       🔵 CONNECT
        ========================= */
     @EventListener
-    public void handleWebSocketConnected(
-            org.springframework.web.socket.messaging.SessionConnectedEvent event) {
+    public void handleWebSocketConnected(SessionConnectedEvent event) {
 
         StompHeaderAccessor accessor = StompHeaderAccessor.wrap(event.getMessage());
         if (accessor.getUser() == null) return;
 
         String username = accessor.getUser().getName();
 
-        AtomicInteger counter =
-                ACTIVE_SESSIONS.computeIfAbsent(username, u -> new AtomicInteger(0));
+        userRepository.findByUsername(username).ifPresent(user -> {
 
-        int sessions = counter.incrementAndGet();
+            AtomicInteger counter =
+                    ACTIVE_SESSIONS.computeIfAbsent(
+                            user.getId(),
+                            u -> new AtomicInteger(0)
+                    );
 
-        // ✅ FIRST ACTIVE SESSION → ONLINE
-        if (sessions == 1) {
-            userRepository.findByUsername(username).ifPresent(user -> {
+            int sessions = counter.incrementAndGet();
+
+            if (sessions == 1) {
                 user.setStatus(User.Status.ONLINE);
                 userRepository.save(user);
 
@@ -61,8 +66,8 @@ public class WebSocketPresenceListener {
                                 null
                         )
                 );
-            });
-        }
+            }
+        });
     }
 
     /* =========================
@@ -76,15 +81,16 @@ public class WebSocketPresenceListener {
 
         String username = accessor.getUser().getName();
 
-        AtomicInteger count = ACTIVE_SESSIONS.get(username);
-        if (count == null) return;
+        userRepository.findByUsername(username).ifPresent(user -> {
 
-        int remaining = count.decrementAndGet();
+            AtomicInteger counter = ACTIVE_SESSIONS.get(user.getId());
+            if (counter == null) return;
 
-        if (remaining <= 0) {
-            ACTIVE_SESSIONS.remove(username);
+            int remaining = counter.decrementAndGet();
 
-            userRepository.findByUsername(username).ifPresent(user -> {
+            if (remaining <= 0) {
+                ACTIVE_SESSIONS.remove(user.getId());
+
                 user.setStatus(User.Status.OFFLINE);
                 user.setLastSeen(LocalDateTime.now());
                 userRepository.save(user);
@@ -97,7 +103,7 @@ public class WebSocketPresenceListener {
                                 user.getLastSeen()
                         )
                 );
-            });
-        }
+            }
+        });
     }
 }

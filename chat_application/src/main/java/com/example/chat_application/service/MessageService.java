@@ -6,6 +6,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -34,12 +35,12 @@ public class MessageService {
     }
 
     /* =====================================================
-       🔐 SEND MESSAGE (AUTO-CREATE PRIVATE CHAT – FINAL)
+       🔐 SEND MESSAGE (PRIVATE + GROUP – FINAL FIXED)
        ===================================================== */
     @Transactional
     public Message sendMessage(
-            String roomId,          // MAY BE NULL FOR FIRST MESSAGE
-            Long receiverId,        // REQUIRED ONLY FOR FIRST MESSAGE
+            String roomId,                  // MAY BE PRESENT EVEN IF ROOM DOES NOT EXIST
+            Long receiverId,                // REQUIRED FOR FIRST PRIVATE MESSAGE
             User sender,
             String cipherText,
             String iv,
@@ -48,32 +49,37 @@ public class MessageService {
             MessageType type
     ) {
 
-        if (cipherText == null || iv == null
-                || encryptedAesKeyForSender == null
-                || encryptedAesKeyForReceiver == null) {
+        /* ===============================
+           🔍 BASIC VALIDATION
+           =============================== */
+        if (cipherText == null || iv == null) {
             throw new IllegalArgumentException("Encrypted payload missing");
         }
 
-        ChatRoom room;
+        ChatRoom room = null;
+
+        /* =====================================================
+           🔥 CRITICAL FIX
+           -----------------------------------------------------
+           roomId != null DOES NOT mean room already exists
+           Frontend may send precomputed roomId on first message
+           ===================================================== */
+        if (roomId != null && !roomId.isBlank()) {
+            room = chatRoomRepository.findByRoomId(roomId).orElse(null);
+        }
 
         /* ===============================
-           🔥 FIRST PRIVATE MESSAGE
+           🏗️ AUTO-CREATE PRIVATE ROOM
            =============================== */
-        if (roomId == null || roomId.isBlank()) {
+        if (room == null) {
 
             if (receiverId == null) {
-                throw new RuntimeException("receiverId required for first private message");
+                throw new RuntimeException(
+                        "ChatRoom not found and receiverId missing for first private message"
+                );
             }
 
             room = createPrivateRoom(sender, receiverId);
-
-        }
-        /* ===============================
-           🔁 EXISTING CHAT
-           =============================== */
-        else {
-            room = chatRoomRepository.findByRoomId(roomId)
-                    .orElseThrow(() -> new RuntimeException("ChatRoom not found"));
         }
 
         /* ===============================
@@ -109,14 +115,16 @@ public class MessageService {
     }
 
     /* =====================================================
-       🏗️ CREATE PRIVATE CHAT ROOM
+       🏗️ CREATE PRIVATE CHAT ROOM (IDEMPOTENT)
        ===================================================== */
     private ChatRoom createPrivateRoom(User sender, Long receiverId) {
 
         User receiver = userRepository.findById(receiverId)
                 .orElseThrow(() -> new RuntimeException("Receiver not found"));
 
-        // 🔁 Reuse if already exists
+        /* ===============================
+           🔁 REUSE EXISTING PRIVATE CHAT
+           =============================== */
         List<ChatRoom> existing =
                 chatRoomRepository.findOneToOneChats(sender.getId(), receiverId);
 
@@ -139,6 +147,9 @@ public class MessageService {
         return chatRoomRepository.save(room);
     }
 
+    /* =====================================================
+       🆔 PRIVATE ROOM ID (DETERMINISTIC)
+       ===================================================== */
     private String generatePrivateRoomId(Long u1, Long u2) {
         long min = Math.min(u1, u2);
         long max = Math.max(u1, u2);
@@ -206,7 +217,7 @@ public class MessageService {
                 MessageRead.builder()
                         .message(message)
                         .user(reader)
-                        .readAt(java.time.LocalDateTime.now())
+                        .readAt(LocalDateTime.now())
                         .build()
         );
 
