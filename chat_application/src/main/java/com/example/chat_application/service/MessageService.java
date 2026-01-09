@@ -159,6 +159,9 @@ public class MessageService {
     /* =====================================================
        📥 FETCH MESSAGES
        ===================================================== */
+  /* =====================================================
+   📥 FETCH MESSAGES (RACE-SAFE)
+   ===================================================== */
     @Transactional(readOnly = true)
     public List<Message> getMessages(
             String roomId,
@@ -167,8 +170,12 @@ public class MessageService {
             int size
     ) {
 
-        ChatRoom room = chatRoomRepository.findByRoomId(roomId)
-                .orElseThrow(() -> new RuntimeException("ChatRoom not found"));
+        ChatRoom room = chatRoomRepository.findByRoomId(roomId).orElse(null);
+
+        // 🔥 FIRST MESSAGE RACE CONDITION FIX
+        if (room == null) {
+            return List.of(); // DO NOT THROW
+        }
 
         boolean isAllowed =
                 room.getType() == ChatRoomType.PRIVATE
@@ -179,7 +186,7 @@ public class MessageService {
                 );
 
         if (!isAllowed) {
-            throw new RuntimeException("You are not allowed to view this chat");
+            return List.of(); // DO NOT THROW
         }
 
         return messageRepository.findByChatRoomOrderByTimestampAscIdAsc(
@@ -187,6 +194,7 @@ public class MessageService {
                 PageRequest.of(Math.max(page, 0), Math.min(size, 50))
         );
     }
+
 
     /* =====================================================
        👁️ MARK MESSAGE AS READ
