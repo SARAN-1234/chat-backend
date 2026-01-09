@@ -42,7 +42,7 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
        ===================================================== */
 
     @Query("""
-    SELECT cr.id,
+    SELECT cr.roomId,
            u.id,
            u.username,
            u.email,

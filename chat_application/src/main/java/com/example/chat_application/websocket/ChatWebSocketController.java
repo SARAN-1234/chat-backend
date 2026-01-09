@@ -65,7 +65,7 @@ public class ChatWebSocketController {
            PERSIST ENCRYPTED MESSAGE
            =============================== */
         Message savedMessage = messageService.sendMessage(
-                msg.getChatRoomId(),
+                msg.getChatRoomId(),          // ✅ STRING roomId
                 sender,
                 msg.getCipherText(),
                 msg.getIv(),
@@ -80,9 +80,10 @@ public class ChatWebSocketController {
         ChatMessageDTO response = new ChatMessageDTO();
 
         response.setId(savedMessage.getId());
-        response.setChatRoomId(savedMessage.getChatRoom().getId());
 
-        // 🔐 encrypted payload (from DB entity)
+        // 🔥 IMPORTANT: SEND roomId, NOT DB id
+        response.setChatRoomId(savedMessage.getChatRoom().getRoomId());
+
         response.setCipherText(savedMessage.getCipherText());
         response.setIv(savedMessage.getIv());
         response.setEncryptedAesKeyForSender(
@@ -99,7 +100,7 @@ public class ChatWebSocketController {
         response.setTimestamp(savedMessage.getTimestamp());
 
         messagingTemplate.convertAndSend(
-                "/topic/chat/" + savedMessage.getChatRoom().getId(),
+                "/topic/chat/" + savedMessage.getChatRoom().getRoomId(), // ✅ STRING
                 response
         );
     }

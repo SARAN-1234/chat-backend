@@ -11,7 +11,9 @@ public class ChatMessageDTO {
        IDENTIFIERS
        =============================== */
     private Long id;
-    private Long chatRoomId;
+
+    // 🔥 PUBLIC IDENTIFIER — MUST BE STRING
+    private String chatRoomId;
 
     /* ===============================
        🔐 ENCRYPTED PAYLOAD (VERBATIM)
@@ -37,26 +39,43 @@ public class ChatMessageDTO {
     public ChatMessageDTO() {}
 
     /* ===== IDs ===== */
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public Long getId() {
+        return id;
+    }
 
-    public Long getChatRoomId() { return chatRoomId; }
-    public void setChatRoomId(Long chatRoomId) {
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getChatRoomId() {
+        return chatRoomId;
+    }
+
+    public void setChatRoomId(String chatRoomId) {
         this.chatRoomId = chatRoomId;
     }
 
     /* ===== ENCRYPTED FIELDS ===== */
-    public String getCipherText() { return cipherText; }
+    public String getCipherText() {
+        return cipherText;
+    }
+
     public void setCipherText(String cipherText) {
         this.cipherText = cipherText;
     }
 
-    public String getIv() { return iv; }
-    public void setIv(String iv) { this.iv = iv; }
+    public String getIv() {
+        return iv;
+    }
+
+    public void setIv(String iv) {
+        this.iv = iv;
+    }
 
     public String getEncryptedAesKeyForSender() {
         return encryptedAesKeyForSender;
     }
+
     public void setEncryptedAesKeyForSender(String encryptedAesKeyForSender) {
         this.encryptedAesKeyForSender = encryptedAesKeyForSender;
     }
@@ -64,33 +83,49 @@ public class ChatMessageDTO {
     public String getEncryptedAesKeyForReceiver() {
         return encryptedAesKeyForReceiver;
     }
+
     public void setEncryptedAesKeyForReceiver(String encryptedAesKeyForReceiver) {
         this.encryptedAesKeyForReceiver = encryptedAesKeyForReceiver;
     }
 
     /* ===== SENDER ===== */
-    public Long getSenderId() { return senderId; }
+    public Long getSenderId() {
+        return senderId;
+    }
+
     public void setSenderId(Long senderId) {
         this.senderId = senderId;
     }
 
-    public String getSenderUsername() { return senderUsername; }
+    public String getSenderUsername() {
+        return senderUsername;
+    }
+
     public void setSenderUsername(String senderUsername) {
         this.senderUsername = senderUsername;
     }
 
     /* ===== METADATA ===== */
-    public MessageType getType() { return type; }
+    public MessageType getType() {
+        return type;
+    }
+
     public void setType(MessageType type) {
         this.type = type != null ? type : MessageType.TEXT;
     }
 
-    public MessageStatus getStatus() { return status; }
+    public MessageStatus getStatus() {
+        return status;
+    }
+
     public void setStatus(MessageStatus status) {
         this.status = status != null ? status : MessageStatus.SENT;
     }
 
-    public LocalDateTime getTimestamp() { return timestamp; }
+    public LocalDateTime getTimestamp() {
+        return timestamp;
+    }
+
     public void setTimestamp(LocalDateTime timestamp) {
         this.timestamp = timestamp;
     }

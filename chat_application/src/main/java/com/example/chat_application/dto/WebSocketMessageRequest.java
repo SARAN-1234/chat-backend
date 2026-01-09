@@ -4,7 +4,8 @@ import com.example.chat_application.model.MessageType;
 
 public class WebSocketMessageRequest {
 
-    private Long chatRoomId;
+    // 🔥 MUST BE STRING (PUBLIC IDENTIFIER)
+    private String chatRoomId;
 
     // 🔐 E2EE fields
     private String cipherText;
@@ -12,18 +13,17 @@ public class WebSocketMessageRequest {
     private String encryptedAesKeyForSender;
     private String encryptedAesKeyForReceiver;
 
-    // 🔥 ADD THIS
     private MessageType type;
 
     /* ===============================
        GETTERS & SETTERS
        =============================== */
 
-    public Long getChatRoomId() {
+    public String getChatRoomId() {
         return chatRoomId;
     }
 
-    public void setChatRoomId(Long chatRoomId) {
+    public void setChatRoomId(String chatRoomId) {
         this.chatRoomId = chatRoomId;
     }
 
@@ -59,7 +59,6 @@ public class WebSocketMessageRequest {
         this.encryptedAesKeyForReceiver = encryptedAesKeyForReceiver;
     }
 
-    // 🔥 NEW
     public MessageType getType() {
         return type;
     }

@@ -33,13 +33,13 @@ public class MessageService {
        ===================================================== */
     @Transactional
     public Message sendMessage(
-            Long chatRoomId,
+            String roomId,   // 🔥 STRING, NOT Long
             User sender,
             String cipherText,
             String iv,
             String encryptedAesKeyForSender,
             String encryptedAesKeyForReceiver,
-            MessageType type // 🔥 REQUIRED
+            MessageType type
     ) {
 
         if (cipherText == null ||
@@ -49,14 +49,14 @@ public class MessageService {
             throw new IllegalArgumentException("Encrypted payload missing");
         }
 
-        ChatRoom room = chatRoomRepository.findById(chatRoomId)
+        ChatRoom room = chatRoomRepository.findByRoomId(roomId)
                 .orElseThrow(() -> new RuntimeException("ChatRoom not found"));
 
         boolean isAllowed =
                 room.getType() == ChatRoomType.PRIVATE
                         ? room.getParticipants().contains(sender)
                         : chatRoomMemberRepository.existsByChatRoomIdAndUserId(
-                        chatRoomId,
+                        room.getId(),   // ✅ DB id internally
                         sender.getId()
                 );
 
@@ -73,7 +73,7 @@ public class MessageService {
                 .encryptedAesKeyForReceiver(encryptedAesKeyForReceiver)
                 .type(type != null ? type : MessageType.TEXT)
                 .status(MessageStatus.SENT)
-                .build(); // 🔥 timestamp handled by @PrePersist
+                .build();
 
         return messageRepository.save(message);
     }
