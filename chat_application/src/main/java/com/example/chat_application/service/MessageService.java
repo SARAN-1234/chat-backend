@@ -34,12 +34,12 @@ public class MessageService {
     }
 
     /* =====================================================
-       🔐 SEND MESSAGE (AUTO-CREATE PRIVATE CHAT)
+       🔐 SEND MESSAGE (AUTO-CREATE PRIVATE CHAT – FINAL)
        ===================================================== */
     @Transactional
     public Message sendMessage(
-            String roomId,
-            Long receiverId,          // REQUIRED only for first PRIVATE msg
+            String roomId,          // MAY BE NULL FOR FIRST MESSAGE
+            Long receiverId,        // REQUIRED ONLY FOR FIRST MESSAGE
             User sender,
             String cipherText,
             String iv,
@@ -54,16 +54,31 @@ public class MessageService {
             throw new IllegalArgumentException("Encrypted payload missing");
         }
 
-        ChatRoom room = chatRoomRepository.findByRoomId(roomId).orElse(null);
+        ChatRoom room;
 
-        // 🔥 Auto-create PRIVATE room
-        if (room == null) {
+        /* ===============================
+           🔥 FIRST PRIVATE MESSAGE
+           =============================== */
+        if (roomId == null || roomId.isBlank()) {
+
             if (receiverId == null) {
-                throw new RuntimeException("ChatRoom not found");
+                throw new RuntimeException("receiverId required for first private message");
             }
+
             room = createPrivateRoom(sender, receiverId);
+
+        }
+        /* ===============================
+           🔁 EXISTING CHAT
+           =============================== */
+        else {
+            room = chatRoomRepository.findByRoomId(roomId)
+                    .orElseThrow(() -> new RuntimeException("ChatRoom not found"));
         }
 
+        /* ===============================
+           🔐 AUTHORIZATION CHECK
+           =============================== */
         boolean isAllowed =
                 room.getType() == ChatRoomType.PRIVATE
                         ? room.getParticipants().contains(sender)
@@ -76,6 +91,9 @@ public class MessageService {
             throw new RuntimeException("You are not allowed to send messages in this chat");
         }
 
+        /* ===============================
+           💾 SAVE MESSAGE
+           =============================== */
         Message message = Message.builder()
                 .chatRoom(room)
                 .sender(sender)
@@ -98,6 +116,7 @@ public class MessageService {
         User receiver = userRepository.findById(receiverId)
                 .orElseThrow(() -> new RuntimeException("Receiver not found"));
 
+        // 🔁 Reuse if already exists
         List<ChatRoom> existing =
                 chatRoomRepository.findOneToOneChats(sender.getId(), receiverId);
 
@@ -127,7 +146,7 @@ public class MessageService {
     }
 
     /* =====================================================
-       📥 FETCH MESSAGES (PUBLIC roomId)
+       📥 FETCH MESSAGES
        ===================================================== */
     @Transactional(readOnly = true)
     public List<Message> getMessages(

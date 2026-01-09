@@ -63,11 +63,12 @@ public class ChatWebSocketController {
 
         /* ===============================
            🔥 CREATE OR FIND CHAT ROOM
-           (FIXES FIRST MESSAGE ISSUE)
+           - If chatRoomId == null → FIRST MESSAGE
+           - If chatRoomId exists → NORMAL MESSAGE
            =============================== */
         Message savedMessage = messageService.sendMessage(
-                msg.getChatRoomId(),                 // 🔑 PUBLIC roomId (String)
-                msg.getReceiverId(),                 // 🔥 REQUIRED for PRIVATE first msg
+                msg.getChatRoomId(),          // 🔑 MAY BE NULL for first msg
+                msg.getReceiverId(),          // 🔥 REQUIRED for first PRIVATE msg
                 sender,
                 msg.getCipherText(),
                 msg.getIv(),
@@ -82,8 +83,10 @@ public class ChatWebSocketController {
         ChatMessageDTO response = new ChatMessageDTO();
         response.setId(savedMessage.getId());
 
-        // 🔥 ALWAYS SEND PUBLIC roomId (String)
-        response.setChatRoomId(savedMessage.getChatRoom().getRoomId());
+        // 🔥 ALWAYS send PUBLIC roomId (String)
+        response.setChatRoomId(
+                savedMessage.getChatRoom().getRoomId()
+        );
 
         response.setCipherText(savedMessage.getCipherText());
         response.setIv(savedMessage.getIv());
