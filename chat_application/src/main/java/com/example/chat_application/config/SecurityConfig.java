@@ -29,36 +29,43 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
 
-                // ✅ Authorization rules
+                // ✅ Authorization
                 .authorizeHttpRequests(auth -> auth
+
+                        // Preflight
                         .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**")
                         .permitAll()
 
-                        // 🔓 PUBLIC endpoints
+                        // 🔓 PUBLIC REST
                         .requestMatchers(
                                 "/auth/**",
-                                "/ws/**",
-                                "/ws/info/**",
                                 "/error",
-                                "/users/search"   // ✅ ONLY search is public
+                                "/users/search"
                         ).permitAll()
 
-                        // 🔒 AUTHENTICATED endpoints
+                        // 🔓 WEBSOCKET (CRITICAL)
+                        .requestMatchers(
+                                "/ws/**",
+                                "/ws/info/**",
+                                "/app/**",      // ✅ STOMP SEND
+                                "/topic/**",    // ✅ STOMP SUBSCRIBE
+                                "/user/**"      // ✅ PRIVATE QUEUE
+                        ).permitAll()
+
+                        // 🔒 AUTHENTICATED REST
                         .requestMatchers(
                                 "/users/public-key",
                                 "/users/presence",
                                 "/profile/**",
-                                "/profile/users/*/public-key",// ✅ FIX
+                                "/profile/users/*/public-key",
                                 "/chatroom/**",
                                 "/message/**",
                                 "/email/**",
                                 "/ai/**"
                         ).authenticated()
 
-                        // 🔒 Everything else
                         .anyRequest().authenticated()
                 )
-
 
                 // ✅ JWT filter
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

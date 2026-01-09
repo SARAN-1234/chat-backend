@@ -28,8 +28,16 @@ public class JwtFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
-        // 🔓 Skip auth routes
-        if (request.getRequestURI().startsWith("/api/auth")) {
+        String path = request.getRequestURI();
+
+        // 🔓 CRITICAL: SKIP AUTH + WEBSOCKET + STOMP PATHS
+        if (
+                path.startsWith("/api/auth") ||
+                        path.startsWith("/api/ws") ||      // WebSocket handshake
+                        path.startsWith("/api/app") ||     // STOMP SEND
+                        path.startsWith("/api/topic") ||   // STOMP SUBSCRIBE
+                        path.startsWith("/api/user")       // Private queues
+        ) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -49,7 +57,9 @@ public class JwtFilter extends OncePerRequestFilter {
                                 Collections.emptyList()
                         );
 
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                SecurityContextHolder
+                        .getContext()
+                        .setAuthentication(authentication);
             }
         }
 
