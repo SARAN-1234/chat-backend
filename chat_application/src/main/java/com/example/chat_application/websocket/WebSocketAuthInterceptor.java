@@ -12,7 +12,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import java.security.Principal;
 import java.util.Collections;
 import java.util.Map;
 
@@ -39,30 +38,28 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         StompCommand command = accessor.getCommand();
         if (command == null) return message;
 
-        // 🔥 AUTHENTICATE BOTH CONNECT AND SEND
-        if (command == StompCommand.CONNECT || command == StompCommand.SEND) {
+        /* ===============================
+           🔐 AUTHENTICATE ON CONNECT ONLY
+           =============================== */
+        if (command == StompCommand.CONNECT) {
 
             String authHeader =
                     accessor.getFirstNativeHeader("Authorization");
 
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                throw new IllegalArgumentException("Missing Authorization header");
+                return message; // ❌ DO NOT THROW
             }
 
             String token = authHeader.substring(7);
-
             if (!jwtUtil.validateToken(token)) {
-                throw new IllegalArgumentException("Invalid JWT token");
+                return message;
             }
 
             String username = jwtUtil.extractUsername(token);
-
             Long userId =
                     userRepository.findUserIdByUsername(username);
 
-            if (userId == null) {
-                throw new IllegalArgumentException("User not found");
-            }
+            if (userId == null) return message;
 
             Authentication authentication =
                     new UsernamePasswordAuthenticationToken(
@@ -72,8 +69,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     );
 
             accessor.setUser(authentication);
-            SecurityContextHolder
-                    .getContext()
+            SecurityContextHolder.getContext()
                     .setAuthentication(authentication);
 
             Map<String, Object> session =
@@ -81,6 +77,19 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
             if (session != null) {
                 session.put(WS_USER_ID, userId);
+            }
+        }
+
+        /* ===============================
+           🔁 REUSE AUTH FOR SEND
+           =============================== */
+        if (command == StompCommand.SEND) {
+            if (accessor.getUser() == null) {
+                accessor.setUser(
+                        SecurityContextHolder
+                                .getContext()
+                                .getAuthentication()
+                );
             }
         }
 
