@@ -1,6 +1,5 @@
 package com.example.chat_application.websocket;
 
-import com.example.chat_application.model.User;
 import com.example.chat_application.repository.UserRepository;
 import com.example.chat_application.security.JwtUtil;
 import org.springframework.messaging.Message;
@@ -9,9 +8,11 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
+import java.security.Principal;
 import java.util.Collections;
 import java.util.Map;
 
@@ -32,34 +33,52 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
 
-        StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
+        StompHeaderAccessor accessor =
+                StompHeaderAccessor.wrap(message);
 
-        if (StompCommand.CONNECT.equals(accessor.getCommand())) {
+        StompCommand command = accessor.getCommand();
+        if (command == null) return message;
 
-            String authHeader = accessor.getFirstNativeHeader("Authorization");
+        // 🔥 AUTHENTICATE BOTH CONNECT AND SEND
+        if (command == StompCommand.CONNECT || command == StompCommand.SEND) {
+
+            String authHeader =
+                    accessor.getFirstNativeHeader("Authorization");
+
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                return message;
+                throw new IllegalArgumentException("Missing Authorization header");
             }
 
             String token = authHeader.substring(7);
+
             if (!jwtUtil.validateToken(token)) {
-                return message;
+                throw new IllegalArgumentException("Invalid JWT token");
             }
 
             String username = jwtUtil.extractUsername(token);
 
-            Long userId = userRepository.findUserIdByUsername(username);
-            if (userId == null) return message;
+            Long userId =
+                    userRepository.findUserIdByUsername(username);
 
-            UsernamePasswordAuthenticationToken principal =
+            if (userId == null) {
+                throw new IllegalArgumentException("User not found");
+            }
+
+            Authentication authentication =
                     new UsernamePasswordAuthenticationToken(
-                            username, null, Collections.emptyList()
+                            username,
+                            null,
+                            Collections.emptyList()
                     );
 
-            accessor.setUser(principal);
-            SecurityContextHolder.getContext().setAuthentication(principal);
+            accessor.setUser(authentication);
+            SecurityContextHolder
+                    .getContext()
+                    .setAuthentication(authentication);
 
-            Map<String, Object> session = accessor.getSessionAttributes();
+            Map<String, Object> session =
+                    accessor.getSessionAttributes();
+
             if (session != null) {
                 session.put(WS_USER_ID, userId);
             }
@@ -67,5 +86,4 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
         return message;
     }
-
 }
