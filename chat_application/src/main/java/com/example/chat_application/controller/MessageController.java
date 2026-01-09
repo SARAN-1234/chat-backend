@@ -1,7 +1,6 @@
 package com.example.chat_application.controller;
 
 import com.example.chat_application.dto.MessageResponseDTO;
-import com.example.chat_application.model.Message;
 import com.example.chat_application.model.MessageType;
 import com.example.chat_application.model.User;
 import com.example.chat_application.repository.UserRepository;
@@ -34,11 +33,11 @@ public class MessageController {
     }
 
     /* =====================================================
-       📥 FETCH MESSAGES (E2EE – NO DECRYPTION)
+       📥 FETCH MESSAGES (PUBLIC roomId)
        ===================================================== */
-    @GetMapping("/chat/{chatRoomId}")
+    @GetMapping("/chat/{roomId}")
     public List<MessageResponseDTO> getMessages(
-            @PathVariable Long chatRoomId,
+            @PathVariable String roomId,   // ✅ FIX: String, not Long
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
             Principal principal
@@ -53,18 +52,11 @@ public class MessageController {
         profileGuardService.checkProfileCompleted(user);
 
         return messageService
-                .getMessages(chatRoomId, user, page, size)
+                .getMessages(roomId, user, page, size)
                 .stream()
-
-                // 🔥 HARD SAFETY: exclude legacy at controller level
                 .filter(m -> m.getType() != MessageType.LEGACY)
-
-                // Map entity → DTO
                 .map(MessageMapper::toDto)
-
-                // 🔥 Remove nulls defensively
                 .filter(Objects::nonNull)
-
                 .collect(Collectors.toList());
     }
 }
