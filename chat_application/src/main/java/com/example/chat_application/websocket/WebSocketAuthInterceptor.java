@@ -39,7 +39,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         if (command == null) return message;
 
         /* ===============================
-           🔐 AUTHENTICATE ON CONNECT ONLY
+           🔐 AUTHENTICATE ON CONNECT
            =============================== */
         if (command == StompCommand.CONNECT) {
 
@@ -47,19 +47,21 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     accessor.getFirstNativeHeader("Authorization");
 
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                return message; // ❌ DO NOT THROW
+                throw new IllegalStateException("Missing Authorization header");
             }
 
             String token = authHeader.substring(7);
             if (!jwtUtil.validateToken(token)) {
-                return message;
+                throw new IllegalStateException("Invalid JWT token");
             }
 
             String username = jwtUtil.extractUsername(token);
             Long userId =
                     userRepository.findUserIdByUsername(username);
 
-            if (userId == null) return message;
+            if (userId == null) {
+                throw new IllegalStateException("User not found");
+            }
 
             Authentication authentication =
                     new UsernamePasswordAuthenticationToken(
@@ -81,15 +83,23 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         }
 
         /* ===============================
-           🔁 REUSE AUTH FOR SEND
+           🔁 ENSURE AUTH ON SEND
            =============================== */
         if (command == StompCommand.SEND) {
+
             if (accessor.getUser() == null) {
-                accessor.setUser(
+                Authentication auth =
                         SecurityContextHolder
                                 .getContext()
-                                .getAuthentication()
-                );
+                                .getAuthentication();
+
+                if (auth == null) {
+                    throw new IllegalStateException(
+                            "Unauthenticated WebSocket SEND"
+                    );
+                }
+
+                accessor.setUser(auth);
             }
         }
 
