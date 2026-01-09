@@ -23,8 +23,10 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
 
-    public WebSocketAuthInterceptor(JwtUtil jwtUtil,
-                                    UserRepository userRepository) {
+    public WebSocketAuthInterceptor(
+            JwtUtil jwtUtil,
+            UserRepository userRepository
+    ) {
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
     }
@@ -36,23 +38,26 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                 StompHeaderAccessor.wrap(message);
 
         StompCommand command = accessor.getCommand();
-        if (command == null) return message;
+        if (command == null) {
+            return message;
+        }
 
         /* ===============================
-           🔐 AUTHENTICATE ON CONNECT
+           🔐 AUTH ON CONNECT
            =============================== */
         if (command == StompCommand.CONNECT) {
 
             String authHeader =
                     accessor.getFirstNativeHeader("Authorization");
 
+            // ❌ DO NOT THROW — drop frame
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                throw new IllegalStateException("Missing Authorization header");
+                return null;
             }
 
             String token = authHeader.substring(7);
             if (!jwtUtil.validateToken(token)) {
-                throw new IllegalStateException("Invalid JWT token");
+                return null;
             }
 
             String username = jwtUtil.extractUsername(token);
@@ -60,7 +65,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     userRepository.findUserIdByUsername(username);
 
             if (userId == null) {
-                throw new IllegalStateException("User not found");
+                return null;
             }
 
             Authentication authentication =
@@ -94,9 +99,8 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                                 .getAuthentication();
 
                 if (auth == null) {
-                    throw new IllegalStateException(
-                            "Unauthenticated WebSocket SEND"
-                    );
+                    // ❌ DO NOT THROW — drop frame
+                    return null;
                 }
 
                 accessor.setUser(auth);
