@@ -35,8 +35,8 @@ public class ChatWebSocketController {
     }
 
     /**
-     * Client → /app/chat.send
-     * Server → /topic/chat/{roomId}
+     * Client  -> /app/chat.send
+     * Server  -> /topic/chat/{roomId}
      */
     @MessageMapping("/chat.send")
     public void sendMessage(
@@ -45,7 +45,7 @@ public class ChatWebSocketController {
     ) {
 
         /* ===============================
-           AUTH FROM WS SESSION
+           🔐 AUTH FROM WS SESSION
            =============================== */
         Object userIdObj = accessor.getSessionAttributes()
                 .get(WebSocketAuthInterceptor.WS_USER_ID);
@@ -54,18 +54,20 @@ public class ChatWebSocketController {
             throw new RuntimeException("Unauthenticated WebSocket session");
         }
 
-        Long userId = Long.valueOf(userIdObj.toString());
+        Long senderId = Long.valueOf(userIdObj.toString());
 
-        User sender = userRepository.findById(userId)
+        User sender = userRepository.findById(senderId)
                 .orElseThrow(() -> new RuntimeException("Sender not found"));
 
         profileGuardService.checkProfileCompleted(sender);
 
         /* ===============================
-           PERSIST ENCRYPTED MESSAGE
+           🔥 CREATE OR FIND CHAT ROOM
+           (FIXES FIRST MESSAGE ISSUE)
            =============================== */
         Message savedMessage = messageService.sendMessage(
-                msg.getChatRoomId(),          // ✅ STRING roomId
+                msg.getChatRoomId(),                 // 🔑 PUBLIC roomId (String)
+                msg.getReceiverId(),                 // 🔥 REQUIRED for PRIVATE first msg
                 sender,
                 msg.getCipherText(),
                 msg.getIv(),
@@ -75,13 +77,12 @@ public class ChatWebSocketController {
         );
 
         /* ===============================
-           BROADCAST PERSISTED MESSAGE
+           📡 BUILD RESPONSE DTO
            =============================== */
         ChatMessageDTO response = new ChatMessageDTO();
-
         response.setId(savedMessage.getId());
 
-        // 🔥 IMPORTANT: SEND roomId, NOT DB id
+        // 🔥 ALWAYS SEND PUBLIC roomId (String)
         response.setChatRoomId(savedMessage.getChatRoom().getRoomId());
 
         response.setCipherText(savedMessage.getCipherText());
@@ -99,8 +100,11 @@ public class ChatWebSocketController {
         response.setSenderUsername(sender.getUsername());
         response.setTimestamp(savedMessage.getTimestamp());
 
+        /* ===============================
+           📣 BROADCAST TO ROOM
+           =============================== */
         messagingTemplate.convertAndSend(
-                "/topic/chat/" + savedMessage.getChatRoom().getRoomId(), // ✅ STRING
+                "/topic/chat/" + savedMessage.getChatRoom().getRoomId(),
                 response
         );
     }

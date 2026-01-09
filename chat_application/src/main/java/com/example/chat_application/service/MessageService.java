@@ -6,7 +6,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class MessageService {
@@ -15,25 +17,29 @@ public class MessageService {
     private final ChatRoomRepository chatRoomRepository;
     private final MessageReadRepository messageReadRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
+    private final UserRepository userRepository;
 
     public MessageService(
             MessageRepository messageRepository,
             ChatRoomRepository chatRoomRepository,
             MessageReadRepository messageReadRepository,
-            ChatRoomMemberRepository chatRoomMemberRepository
+            ChatRoomMemberRepository chatRoomMemberRepository,
+            UserRepository userRepository
     ) {
         this.messageRepository = messageRepository;
         this.chatRoomRepository = chatRoomRepository;
         this.messageReadRepository = messageReadRepository;
         this.chatRoomMemberRepository = chatRoomMemberRepository;
+        this.userRepository = userRepository;
     }
 
     /* =====================================================
-       🔐 SEND MESSAGE (DUAL-KEY E2EE – FINAL)
+       🔐 SEND MESSAGE (AUTO-CREATE PRIVATE CHAT)
        ===================================================== */
     @Transactional
     public Message sendMessage(
-            String roomId,   // 🔥 STRING, NOT Long
+            String roomId,                // PUBLIC identifier
+            Long receiverId,              // REQUIRED for first PRIVATE message
             User sender,
             String cipherText,
             String iv,
@@ -42,21 +48,29 @@ public class MessageService {
             MessageType type
     ) {
 
-        if (cipherText == null ||
-                iv == null ||
-                encryptedAesKeyForSender == null ||
-                encryptedAesKeyForReceiver == null) {
+        if (cipherText == null || iv == null
+                || encryptedAesKeyForSender == null
+                || encryptedAesKeyForReceiver == null) {
             throw new IllegalArgumentException("Encrypted payload missing");
         }
 
-        ChatRoom room = chatRoomRepository.findByRoomId(roomId)
-                .orElseThrow(() -> new RuntimeException("ChatRoom not found"));
+        // 1️⃣ Find existing room
+        ChatRoom room = chatRoomRepository.findByRoomId(roomId).orElse(null);
 
+        // 2️⃣ Auto-create PRIVATE room if missing (first message)
+        if (room == null) {
+            if (receiverId == null) {
+                throw new RuntimeException("ChatRoom not found");
+            }
+            room = createPrivateRoom(sender, receiverId);
+        }
+
+        // 3️⃣ Authorization check
         boolean isAllowed =
                 room.getType() == ChatRoomType.PRIVATE
                         ? room.getParticipants().contains(sender)
                         : chatRoomMemberRepository.existsByChatRoomIdAndUserId(
-                        room.getId(),   // ✅ DB id internally
+                        room.getId(),
                         sender.getId()
                 );
 
@@ -64,6 +78,7 @@ public class MessageService {
             throw new RuntimeException("You are not allowed to send messages in this chat");
         }
 
+        // 4️⃣ Persist encrypted message
         Message message = Message.builder()
                 .chatRoom(room)
                 .sender(sender)
@@ -79,24 +94,65 @@ public class MessageService {
     }
 
     /* =====================================================
-       📥 FETCH MESSAGES (READ ONLY – E2EE SAFE)
+       🏗️ CREATE PRIVATE CHAT ROOM (SECURE)
+       ===================================================== */
+    private ChatRoom createPrivateRoom(User sender, Long receiverId) {
+
+        User receiver = userRepository.findById(receiverId)
+                .orElseThrow(() -> new RuntimeException("Receiver not found"));
+
+        // 🔁 Reuse existing one-to-one chat if exists
+        List<ChatRoom> existing =
+                chatRoomRepository.findOneToOneChats(sender.getId(), receiverId);
+
+        if (!existing.isEmpty()) {
+            return existing.get(0);
+        }
+
+        // 🔐 Deterministic, secure roomId
+        String roomId = generatePrivateRoomId(sender.getId(), receiverId);
+
+        Set<User> participants = new HashSet<>();
+        participants.add(sender);
+        participants.add(receiver);
+
+        ChatRoom room = ChatRoom.builder()
+                .roomId(roomId)
+                .type(ChatRoomType.PRIVATE)
+                .participants(participants)
+                .build();
+
+        return chatRoomRepository.save(room);
+    }
+
+    /* =====================================================
+       🔐 PRIVATE ROOM ID (BACKEND GENERATED)
+       ===================================================== */
+    private String generatePrivateRoomId(Long u1, Long u2) {
+        long min = Math.min(u1, u2);
+        long max = Math.max(u1, u2);
+        return "private-" + min + "-" + max;
+    }
+
+    /* =====================================================
+       📥 FETCH MESSAGES (ROOMID SAFE)
        ===================================================== */
     @Transactional(readOnly = true)
     public List<Message> getMessages(
-            Long chatRoomId,
+            String roomId,
             User user,
             int page,
             int size
     ) {
 
-        ChatRoom room = chatRoomRepository.findById(chatRoomId)
+        ChatRoom room = chatRoomRepository.findByRoomId(roomId)
                 .orElseThrow(() -> new RuntimeException("ChatRoom not found"));
 
         boolean isAllowed =
                 room.getType() == ChatRoomType.PRIVATE
                         ? room.getParticipants().contains(user)
                         : chatRoomMemberRepository.existsByChatRoomIdAndUserId(
-                        chatRoomId,
+                        room.getId(),
                         user.getId()
                 );
 
@@ -104,17 +160,14 @@ public class MessageService {
             throw new RuntimeException("You are not allowed to view this chat");
         }
 
-        int safePage = Math.max(page, 0);
-        int safeSize = Math.min(Math.max(size, 1), 50);
-
         return messageRepository.findByChatRoomOrderByTimestampAscIdAsc(
                 room,
-                PageRequest.of(safePage, safeSize)
+                PageRequest.of(Math.max(page, 0), Math.min(size, 50))
         );
     }
 
     /* =====================================================
-       👁️ MARK MESSAGE AS READ (UNCHANGED)
+       👁️ MARK MESSAGE AS READ
        ===================================================== */
     @Transactional
     public void markMessageAsRead(Long messageId, User reader) {
@@ -122,9 +175,7 @@ public class MessageService {
         Message message = messageRepository.findById(messageId)
                 .orElseThrow(() -> new RuntimeException("Message not found"));
 
-        if (message.getSender().getId().equals(reader.getId())) {
-            return;
-        }
+        if (message.getSender().getId().equals(reader.getId())) return;
 
         ChatRoom room = message.getChatRoom();
 
@@ -136,21 +187,17 @@ public class MessageService {
                         reader.getId()
                 );
 
-        if (!isAllowed) {
-            throw new RuntimeException("You are not allowed to read this message");
-        }
+        if (!isAllowed) return;
 
-        if (messageReadRepository.existsByMessageAndUser(message, reader)) {
-            return;
-        }
+        if (messageReadRepository.existsByMessageAndUser(message, reader)) return;
 
-        MessageRead read = MessageRead.builder()
-                .message(message)
-                .user(reader)
-                .readAt(java.time.LocalDateTime.now())
-                .build();
-
-        messageReadRepository.save(read);
+        messageReadRepository.save(
+                MessageRead.builder()
+                        .message(message)
+                        .user(reader)
+                        .readAt(java.time.LocalDateTime.now())
+                        .build()
+        );
 
         if (message.getStatus() != MessageStatus.READ) {
             message.setStatus(MessageStatus.READ);

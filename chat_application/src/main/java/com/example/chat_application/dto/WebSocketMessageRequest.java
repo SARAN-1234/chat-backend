@@ -4,8 +4,11 @@ import com.example.chat_application.model.MessageType;
 
 public class WebSocketMessageRequest {
 
-    // 🔥 MUST BE STRING (PUBLIC IDENTIFIER)
+    // 🔥 PUBLIC ROOM IDENTIFIER (string)
     private String chatRoomId;
+
+    // 🔥 REQUIRED FOR FIRST PRIVATE MESSAGE
+    private Long receiverId;
 
     // 🔐 E2EE fields
     private String cipherText;
@@ -25,6 +28,14 @@ public class WebSocketMessageRequest {
 
     public void setChatRoomId(String chatRoomId) {
         this.chatRoomId = chatRoomId;
+    }
+
+    public Long getReceiverId() {
+        return receiverId;
+    }
+
+    public void setReceiverId(Long receiverId) {
+        this.receiverId = receiverId;
     }
 
     public String getCipherText() {
