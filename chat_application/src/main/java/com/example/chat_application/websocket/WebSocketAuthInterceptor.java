@@ -7,9 +7,9 @@ import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
@@ -34,8 +34,16 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
 
+        // ✅ MUST use this — never wrap()
         StompHeaderAccessor accessor =
-                StompHeaderAccessor.wrap(message);
+                MessageHeaderAccessor.getAccessor(
+                        message,
+                        StompHeaderAccessor.class
+                );
+
+        if (accessor == null) {
+            return message;
+        }
 
         StompCommand command = accessor.getCommand();
         if (command == null) {
@@ -43,21 +51,21 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         }
 
         /* ===============================
-           🔐 AUTH ON CONNECT
+           🔐 AUTH ONLY ON CONNECT
            =============================== */
         if (command == StompCommand.CONNECT) {
 
             String authHeader =
                     accessor.getFirstNativeHeader("Authorization");
 
-            // ❌ DO NOT THROW — drop frame
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                return null;
+                return null; // ❌ reject connection
             }
 
             String token = authHeader.substring(7);
+
             if (!jwtUtil.validateToken(token)) {
-                return null;
+                return null; // ❌ reject connection
             }
 
             String username = jwtUtil.extractUsername(token);
@@ -65,9 +73,10 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     userRepository.findUserIdByUsername(username);
 
             if (userId == null) {
-                return null;
+                return null; // ❌ reject connection
             }
 
+            // ✅ Attach user to STOMP session
             Authentication authentication =
                     new UsernamePasswordAuthenticationToken(
                             username,
@@ -76,9 +85,8 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     );
 
             accessor.setUser(authentication);
-            SecurityContextHolder.getContext()
-                    .setAuthentication(authentication);
 
+            // 🔥 THIS IS THE MOST IMPORTANT LINE
             Map<String, Object> session =
                     accessor.getSessionAttributes();
 
@@ -87,26 +95,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             }
         }
 
-        /* ===============================
-           🔁 ENSURE AUTH ON SEND
-           =============================== */
-        if (command == StompCommand.SEND) {
-
-            if (accessor.getUser() == null) {
-                Authentication auth =
-                        SecurityContextHolder
-                                .getContext()
-                                .getAuthentication();
-
-                if (auth == null) {
-                    // ❌ DO NOT THROW — drop frame
-                    return null;
-                }
-
-                accessor.setUser(auth);
-            }
-        }
-
+        // ❌ DO NOT AUTH ON SEND / SUBSCRIBE
         return message;
     }
 }
