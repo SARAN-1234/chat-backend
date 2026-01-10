@@ -15,7 +15,6 @@ import java.security.Principal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/chatroom")
@@ -25,16 +24,18 @@ public class ChatRoomController {
     private final UserRepository userRepository;
     private final ProfileGuardService profileGuardService;
 
-    public ChatRoomController(ChatRoomRepository chatRoomRepository,
-                              UserRepository userRepository,
-                              ProfileGuardService profileGuardService) {
+    public ChatRoomController(
+            ChatRoomRepository chatRoomRepository,
+            UserRepository userRepository,
+            ProfileGuardService profileGuardService
+    ) {
         this.chatRoomRepository = chatRoomRepository;
         this.userRepository = userRepository;
         this.profileGuardService = profileGuardService;
     }
 
     /* =====================================================
-       ✅ EXISTING FUNCTIONALITY (UNCHANGED)
+       🔐 ONE-TO-ONE CHAT (DETERMINISTIC)
        ===================================================== */
     @PostMapping("/one-to-one")
     public ChatRoomResponseDTO createOneToOneChat(
@@ -45,9 +46,8 @@ public class ChatRoomController {
             throw new RuntimeException("Unauthenticated request");
         }
 
-        String username = principal.getName();
-
-        User currentUser = userRepository.findByUsername(username)
+        User currentUser = userRepository
+                .findByUsername(principal.getName())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         profileGuardService.checkProfileCompleted(currentUser);
@@ -66,8 +66,13 @@ public class ChatRoomController {
             User otherUser = userRepository.findById(otherUserId)
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
+            String roomId = generatePrivateRoomId(
+                    currentUser.getId(),
+                    otherUserId
+            );
+
             ChatRoom newRoom = new ChatRoom();
-            newRoom.setRoomId(UUID.randomUUID().toString());
+            newRoom.setRoomId(roomId);
             newRoom.setType(ChatRoomType.PRIVATE);
             newRoom.setParticipants(Set.of(currentUser, otherUser));
 
@@ -78,7 +83,7 @@ public class ChatRoomController {
     }
 
     /* =====================================================
-       🆕 WHATSAPP-STYLE SIDEBAR (NEW, SAFE)
+       💬 CHAT SIDEBAR (STRING roomId)
        ===================================================== */
     @GetMapping("/sidebar")
     public List<ChatSidebarDTO> getChatSidebar(Principal principal) {
@@ -87,7 +92,8 @@ public class ChatRoomController {
             throw new RuntimeException("Unauthenticated request");
         }
 
-        User user = userRepository.findByUsername(principal.getName())
+        User user = userRepository
+                .findByUsername(principal.getName())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         profileGuardService.checkProfileCompleted(user);
@@ -95,12 +101,23 @@ public class ChatRoomController {
         return chatRoomRepository.findChatRoomsWithLastMessage(user)
                 .stream()
                 .map(row -> new ChatSidebarDTO(
-                        (Long) row[0],              // chatRoomId
-                        (Long) row[1],              // otherUserId
-                        (String) row[2],            // username
-                        (String) row[3],            // email
-                        (String) row[4],            // ✅ publicKey
-                        (LocalDateTime) row[5],     // timestamp
-                        (Long) row[6]               // senderId
+                        (String) row[0],          // ✅ roomId STRING
+                        (Long) row[1],            // otherUserId
+                        (String) row[2],          // username
+                        (String) row[3],          // publicKey
+                        (String) row[4],          // email
+                        (LocalDateTime) row[5],   // timestamp
+                        (Long) row[6]             // senderId
                 ))
-                .toList();}}
+                .toList();
+    }
+
+    /* =====================================================
+       🔑 PRIVATE ROOM ID (SINGLE SOURCE OF TRUTH)
+       ===================================================== */
+    private String generatePrivateRoomId(Long u1, Long u2) {
+        long min = Math.min(u1, u2);
+        long max = Math.max(u1, u2);
+        return "private-" + min + "-" + max;
+    }
+}
