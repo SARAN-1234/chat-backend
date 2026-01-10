@@ -6,10 +6,6 @@ import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
-import org.springframework.web.socket.server.support.DefaultHandshakeHandler;
-
-import java.security.Principal;
-import java.util.Map;
 
 @Configuration
 @EnableWebSocketMessageBroker
@@ -24,38 +20,29 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
 
-        // 🔹 Broadcast messages (chat, presence)
+        // 🔹 Broadcast (chat, presence)
         registry.enableSimpleBroker("/topic", "/queue");
 
         // 🔹 Client → Server
         registry.setApplicationDestinationPrefixes("/app");
 
-        // 🔹 REQUIRED for /user/queue/*
+        // 🔹 /user/queue/*
         registry.setUserDestinationPrefix("/user");
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
 
-        registry.addEndpoint("/ws")
+        registry
+                .addEndpoint("/ws")
                 .setAllowedOriginPatterns("*")
-                // 🔥 THIS IS THE FIX
-                .setHandshakeHandler(new DefaultHandshakeHandler() {
-                    @Override
-                    protected Principal determineUser(
-                            org.springframework.http.server.ServerHttpRequest request,
-                            org.springframework.web.socket.WebSocketHandler wsHandler,
-                            Map<String, Object> attributes) {
-
-                        // Must match what you stored in WebSocketAuthInterceptor
-                        return (Principal) attributes.get("SPRING_USER");
-                    }
-                });
+                .withSockJS()
+                // 🔥 REQUIRED ON RENDER / CLOUD
+                .setSessionCookieNeeded(false)
+                .setHeartbeatTime(25000)
+                .setDisconnectDelay(5000);
     }
 
-    /**
-     * ✅ JWT validation for WebSocket CONNECT
-     */
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.interceptors(webSocketAuthInterceptor);
