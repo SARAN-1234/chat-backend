@@ -2,9 +2,15 @@ package com.example.chat_application.dto;
 
 import java.time.LocalDateTime;
 
+/**
+ * Sidebar DTO MUST use PUBLIC roomId (String)
+ * NEVER database IDs.
+ */
 public class ChatSidebarDTO {
 
-    private Long chatRoomId;
+    // 🔥 PUBLIC STRING roomId (e.g. private-1-2)
+    private String roomId;
+
     private Long otherUserId;
     private String otherUsername;
     private String otherUserEmail;
@@ -13,7 +19,7 @@ public class ChatSidebarDTO {
     private Long lastMessageSenderId;
 
     public ChatSidebarDTO(
-            Long chatRoomId,
+            String roomId,
             Long otherUserId,
             String otherUsername,
             String otherUserEmail,
@@ -21,7 +27,7 @@ public class ChatSidebarDTO {
             LocalDateTime lastMessageTime,
             Long lastMessageSenderId
     ) {
-        this.chatRoomId = chatRoomId;
+        this.roomId = roomId;
         this.otherUserId = otherUserId;
         this.otherUsername = otherUsername;
         this.otherUserEmail = otherUserEmail;
@@ -30,14 +36,35 @@ public class ChatSidebarDTO {
         this.lastMessageSenderId = lastMessageSenderId;
     }
 
+    /* ===============================
+       GETTERS
+       =============================== */
+
+    public String getRoomId() {
+        return roomId;
+    }
+
+    public Long getOtherUserId() {
+        return otherUserId;
+    }
+
+    public String getOtherUsername() {
+        return otherUsername;
+    }
+
+    public String getOtherUserEmail() {
+        return otherUserEmail;
+    }
+
     public String getOtherUserPublicKey() {
         return otherUserPublicKey;
     }
 
-    public Long getChatRoomId() { return chatRoomId; }
-    public Long getOtherUserId() { return otherUserId; }
-    public String getOtherUsername() { return otherUsername; }
-    public String getOtherUserEmail() { return otherUserEmail; }
-    public LocalDateTime getLastMessageTime() { return lastMessageTime; }
-    public Long getLastMessageSenderId() { return lastMessageSenderId; }
+    public LocalDateTime getLastMessageTime() {
+        return lastMessageTime;
+    }
+
+    public Long getLastMessageSenderId() {
+        return lastMessageSenderId;
+    }
 }
